@@ -1,6 +1,6 @@
-[![Go Reference](https://pkg.go.dev/badge/github.com/Kentzo/dsosession.svg)](https://pkg.go.dev/github.com/Kentzo/dsosession)
-[![Coverage Status](https://coveralls.io/repos/github/Kentzo/dsosession/badge.svg?branch=main)](https://coveralls.io/github/Kentzo/dsosession?branch=main)
-[![CI](https://github.com/Kentzo/dsosession/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Kentzo/dsosession/actions/workflows/ci.yml?query=branch%3Amain)
+[![Go Reference](https://pkg.go.dev/badge/github.com/kentzo/dsosession.svg)](https://pkg.go.dev/github.com/kentzo/dsosession)
+[![Coverage Status](https://coveralls.io/repos/github/kentzo/dsosession/badge.svg?branch=main)](https://coveralls.io/github/kentzo/dsosession?branch=main)
+[![CI](https://github.com/kentzo/dsosession/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/kentzo/dsosession/actions/workflows/ci.yml?query=branch%3Amain)
 
 # dsosession
 
