@@ -183,6 +183,30 @@ func (s *Session) Abort() error {
 	return s.close(true)
 }
 
+// Drain drains connection including its underlying transport, if any.
+//
+// Draining makes peer responsible to send FIN and thus avoids TIME-WAIT
+// on socket behind [Session.Conn].
+//
+// RFC 8490, Section 5.3: Where this specification requires a connection
+// to be closed gracefully, the requirement to initiate that graceful close
+// is placed on the client in order to place the burden of TCP's TIME-WAIT
+// state on the client rather than the server.
+func (s *Session) Drain() (err error) {
+	s.Conn.SetReadDeadline(time.Now().Add(SessionGracefulCloseTimeout))
+	_, err = io.Copy(io.Discard, s.Conn)
+	if err != nil {
+		return err
+	}
+	if netConner, ok := s.Conn.(interface{ NetConn() net.Conn }); ok {
+		if closeWriter, ok := s.Conn.(interface{ CloseWrite() error }); ok {
+			closeWriter.CloseWrite()
+		}
+		_, err = io.Copy(io.Discard, netConner.NetConn())
+	}
+	return err
+}
+
 func (s *Session) writeDNS(msg []byte) (n int, err error) {
 	state := s.beginWrite()
 	defer s.endWrite()
@@ -212,7 +236,7 @@ func (s *Session) doClose() {
 	select {
 	case <-time.After(SessionGracefulCloseTimeout):
 		if s.swapState(StateClosed) != StateClosed {
-			abortConn(s.Conn)
+			AbortConn(s.Conn)
 			close(s.closedC)
 		}
 	case <-s.closedC:
@@ -242,10 +266,7 @@ func (s *Session) writeCloseUnidirectional(msg []byte) (n int, err error) {
 
 	switch state {
 	case StateWaiting:
-		if s.swapState(StateClosed) != StateClosed {
-			close(s.closedC)
-			s.Conn.Close()
-		}
+		s.Abort()
 		return 0, ErrStateClosed
 	case StatePending:
 		fallthrough
@@ -364,7 +385,7 @@ func (s *Session) close(abort bool) (err error) {
 		fallthrough
 	case StateClosing:
 		if abort {
-			abortConn(s.Conn)
+			AbortConn(s.Conn)
 		} else {
 			err = s.Conn.Close()
 		}
@@ -423,7 +444,8 @@ func (s *Session) swapState(new State) State {
 	}
 }
 
-func abortConn(conn net.Conn) {
+// AbortConn aborts connection using NetConn() and SetLinger(), if available.
+func AbortConn(conn net.Conn) error {
 	netConn := conn
 	if netConner, ok := netConn.(interface{ NetConn() net.Conn }); ok {
 		netConn = netConner.NetConn()
@@ -431,7 +453,7 @@ func abortConn(conn net.Conn) {
 	if setLingerer, ok := netConn.(interface{ SetLinger(int) error }); ok {
 		setLingerer.SetLinger(0)
 	}
-	netConn.Close()
+	return netConn.Close()
 }
 
 type rawMsg []byte
