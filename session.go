@@ -116,7 +116,7 @@ func (s *Session) State() (state State) {
 
 // ReadMsg reads and returns one DNS message without length-prefix.
 func (s *Session) ReadMsg(deadline time.Time) (msg []byte, err error) {
-	s.Conn.SetReadDeadline(deadline)
+	_ = s.Conn.SetReadDeadline(deadline)
 
 	var length uint16
 	if err = binary.Read(s.Conn, binary.BigEndian, &length); err != nil {
@@ -193,14 +193,14 @@ func (s *Session) Abort() error {
 // is placed on the client in order to place the burden of TCP's TIME-WAIT
 // state on the client rather than the server.
 func (s *Session) Drain() (err error) {
-	s.Conn.SetReadDeadline(time.Now().Add(SessionGracefulCloseTimeout))
+	_ = s.Conn.SetReadDeadline(time.Now().Add(SessionGracefulCloseTimeout))
 	_, err = io.Copy(io.Discard, s.Conn)
 	if err != nil {
 		return err
 	}
 	if netConner, ok := s.Conn.(interface{ NetConn() net.Conn }); ok {
 		if closeWriter, ok := s.Conn.(interface{ CloseWrite() error }); ok {
-			closeWriter.CloseWrite()
+			_ = closeWriter.CloseWrite()
 		}
 		_, err = io.Copy(io.Discard, netConner.NetConn())
 	}
@@ -236,7 +236,7 @@ func (s *Session) doClose() {
 	select {
 	case <-time.After(SessionGracefulCloseTimeout):
 		if s.swapState(StateClosed) != StateClosed {
-			AbortConn(s.Conn)
+			_ = AbortConn(s.Conn)
 			close(s.closedC)
 		}
 	case <-s.closedC:
@@ -266,7 +266,7 @@ func (s *Session) writeCloseUnidirectional(msg []byte) (n int, err error) {
 
 	switch state {
 	case StateWaiting:
-		s.Abort()
+		_ = s.Abort()
 		return 0, ErrStateClosed
 	case StatePending:
 		fallthrough
@@ -385,7 +385,7 @@ func (s *Session) close(abort bool) (err error) {
 		fallthrough
 	case StateClosing:
 		if abort {
-			AbortConn(s.Conn)
+			_ = AbortConn(s.Conn)
 		} else {
 			err = s.Conn.Close()
 		}
@@ -451,7 +451,7 @@ func AbortConn(conn net.Conn) error {
 		netConn = netConner.NetConn()
 	}
 	if setLingerer, ok := netConn.(interface{ SetLinger(int) error }); ok {
-		setLingerer.SetLinger(0)
+		_ = setLingerer.SetLinger(0)
 	}
 	return netConn.Close()
 }
