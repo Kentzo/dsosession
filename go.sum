@@ -1,7 +1,7 @@
 github.com/google/go-cmp v0.7.0 h1:wk8382ETsv4JYUZwIsn6YpYiWiBsYLSJiTsyBybVuN8=
 github.com/google/go-cmp v0.7.0/go.mod h1:pXiqmnSA92OHEEa9HXL2W4E7lf9JzCmGVUdgjX3N/iU=
-github.com/kentzo/dsomessage v0.0.0-20261002041234-db788d63ad6d h1:Zbgjieut+zFl7OSMDjIRzsUAmV5/H+MrCi8rXWyb7mU=
-github.com/kentzo/dsomessage v0.0.0-20261002041234-db788d63ad6d/go.mod h1:3GvSEH0PZvZtv1GcscFP9t/ryq2a4PvH9BozRpZjMio=
+github.com/kentzo/dsomessage v0.1.0 h1:RzJ5hZpjAGY6O37w9eJQU/32VOh7CHlaW7R6/IdGsL8=
+github.com/kentzo/dsomessage v0.1.0/go.mod h1:3GvSEH0PZvZtv1GcscFP9t/ryq2a4PvH9BozRpZjMio=
 github.com/miekg/dns v1.1.73 h1:uhT8nJxmTrPJYClxVxTCX+CVn6qnzSiybRk72Z6DgrE=
 github.com/miekg/dns v1.1.73/go.mod h1:RW2Obtfd5NZHvOFe3zYG0W8koWOQtAzyHaLo8vASBuQ=
 golang.org/x/net v0.57.0 h1:K5+3DljvIuDG9/Jv9rvyMywYNFCQ9RSUY6OOTTkT+tE=
