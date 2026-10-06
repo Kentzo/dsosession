@@ -6,5 +6,10 @@
 
 dsosession provides [RFC 8490][rfc8490] DNS Stateful Operations and [RFC 8765][rfc8765] DNS Push Notifications session machinery.
 
+## See Also
+
+[coredns-dso][https://github.com/Kentzo/coredns-dso] for extended example.
+
 [rfc8490]: https://www.rfc-editor.org/rfc/rfc8490.html
 [rfc8765]: https://www.rfc-editor.org/rfc/rfc8765.html
+[coredns-dso]: https://github.com/Kentzo/coredns-dso
