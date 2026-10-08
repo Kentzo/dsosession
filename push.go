@@ -48,6 +48,14 @@ type (
 		key pushSubscribeKey
 	}
 
+	// PushDebugWriter can be optionally implemented by writer passed to [Push.Serve] to observe changes sent to client.
+	PushDebugWriter interface {
+		io.Writer
+
+		// WritePushChange receives deep copy of change after it's written.
+		WritePushChange(change []dns.RR)
+	}
+
 	// pushSubscribeKey is normalized TLV for duplicate detection.
 	pushSubscribeKey dsomessage.Subscribe
 
@@ -237,12 +245,16 @@ func (push *Push) Subscriptions() iter.Seq[dsomessage.Subscribe] {
 // upstream lookups. Initial subscription burst is countered by debounceDelay.
 // The difference is sent to client.
 //
+// See also [PushDebugWriter].
+//
 // Returns [context.Context.Err] if stopped gracefully. Otherwise returns resolving, packing or writing error.
 func (push *Push) Serve(ctx context.Context, writer io.Writer, upstream PushLookuper, debounceDelay, refreshInterval time.Duration) error {
 	var (
 		doneC    = make(chan struct{})
 		dirtyC   chan struct{}
 		refreshC chan struct{}
+
+		debugWriter, _ = writer.(PushDebugWriter)
 	)
 	defer close(doneC)
 	if debounceDelay > 0 {
@@ -323,8 +335,14 @@ func (push *Push) Serve(ctx context.Context, writer io.Writer, upstream PushLook
 		if err != nil {
 			return err
 		}
+		if len(change) == 0 {
+			continue
+		}
 
-		err = push.writeChange(ctx, writer, change)
+		n, err := push.writeChange(ctx, writer, change)
+		if debugWriter != nil && n > 0 {
+			debugWriter.WritePushChange(cloneRRs(change[:n]))
+		}
 		if err != nil {
 			return err
 		}
@@ -371,20 +389,27 @@ func (push *Push) resolveDirty(ctx context.Context, upstream PushLookuper, dirty
 }
 
 // writeChange chunks change, if needed, and writes Push updates to client.
-func (push *Push) writeChange(ctx context.Context, writer io.Writer, change []dns.RR) error {
-	for msg, err := range buildUpdateMsg(change) {
-		if err != nil {
-			return err
+//
+// Returns number of RRs in change that were written.
+func (push *Push) writeChange(ctx context.Context, writer io.Writer, change []dns.RR) (n int, err error) {
+	for msg, buildErr := range buildUpdateMsg(change) {
+		if msg == nil {
+			return n, buildErr
 		}
-		if err = ctx.Err(); err != nil {
-			return err
+		if err := ctx.Err(); err != nil {
+			return n, err
 		}
 		_, err = writer.Write(msg)
 		if err != nil {
-			return err
+			return n, err
+		}
+		if packErr, ok := errors.AsType[*dsomessage.PackingError](buildErr); ok {
+			n = packErr.Index
+		} else {
+			n = len(change)
 		}
 	}
-	return nil
+	return n, nil
 }
 
 func (k pushSubscribeKey) expand(classes, types []uint16) iter.Seq[pushSubscribeKey] {
@@ -405,6 +430,17 @@ func (k pushSubscribeKey) expand(classes, types []uint16) iter.Seq[pushSubscribe
 			}
 		}
 	}
+}
+
+func cloneRRs(rrs []dns.RR) (rrs1 []dns.RR) {
+	if rrs == nil {
+		return nil
+	}
+	rrs1 = make([]dns.RR, len(rrs))
+	for i := range rrs {
+		rrs1[i] = dns.Copy(rrs[i])
+	}
+	return rrs1
 }
 
 // update sets newRRs and computes symmetric difference for DSO Push Update.
@@ -517,16 +553,17 @@ func (s *rrSet) update(newRRs []dns.RR) (change []dns.RR) {
 	return change
 }
 
-// buildUpdateMsg generates sequence of DSO Push Update messages.
+// buildUpdateMsg generates sequence of DSO Push Update messages,
+// chunking to fit [dsomessage.MaxPushMsgLen].
 //
-// Non-nil error signals fatal condition that should abort session.
-// Yielded buffer is owned by iterator.
+// Yields:
+//   - Non-nil msg and nil err: final chunk
+//   - Non-nil msg and [*dsomessage.PackingError]: more chunks to follow
+//   - Nil msg: fatal condition, err explains why
+//
+// Buffer is owned by iterator.
 func buildUpdateMsg(change []dns.RR) iter.Seq2[[]byte, error] {
 	return func(yield func([]byte, error) bool) {
-		if len(change) == 0 {
-			return
-		}
-
 		poolBuf := updateMsgPool.Get().(*[]byte)
 		defer updateMsgPool.Put(poolBuf)
 
@@ -564,11 +601,12 @@ func buildUpdateMsg(change []dns.RR) iter.Seq2[[]byte, error] {
 				retry = true
 			case packErr != nil: // some RRs were written, but there are more
 				msg, _ := builder.Message()
-				if !yield(msg, nil) {
+				i += packErr.Index
+				packErr.Index = i
+				if !yield(msg, packErr) {
 					return
 				}
 				builder.Clear()
-				i += packErr.Index
 				retry = false
 			default: // final chunk
 				msg, _ := builder.Message()

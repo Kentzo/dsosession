@@ -24,10 +24,11 @@ import (
 type testPush struct {
 	*Push
 
-	zone    sync.Map
-	mu      sync.Mutex
-	changes [][]dns.RR
-	i       int
+	zone         sync.Map
+	mu           sync.Mutex
+	changes      [][]dns.RR
+	debugChanges [][]dns.RR
+	i            int
 
 	writeErr    error
 	writeDelay  time.Duration
@@ -38,17 +39,6 @@ func newTestPush() *testPush {
 	return &testPush{
 		Push: NewPush([]uint16{dns.ClassINET}, []uint16{dns.TypeA, dns.TypeTXT, dns.TypeAAAA, dns.TypeAPL}),
 	}
-}
-
-func cloneRRSet(rrs []dns.RR) (rrs1 []dns.RR) {
-	if rrs == nil {
-		return nil
-	}
-	rrs1 = make([]dns.RR, len(rrs))
-	for i := range rrs {
-		rrs1[i] = dns.Copy(rrs[i])
-	}
-	return rrs1
 }
 
 // Write implements [io.Writer].
@@ -66,8 +56,13 @@ func (push *testPush) Write(msg []byte) (int, error) {
 	push.mu.Lock()
 	defer push.mu.Unlock()
 
-	push.changes = append(push.changes, cloneRRSet(tlv.Change))
+	push.changes = append(push.changes, cloneRRs(tlv.Change))
 	return len(msg), nil
+}
+
+// WritePushChange implements [PushDebugWriter].
+func (push *testPush) WritePushChange(change []dns.RR) {
+	push.debugChanges = append(push.debugChanges, change)
 }
 
 // Lookup implements [PushLookuper.LookupPushSubscription].
@@ -215,6 +210,11 @@ func (push *testPush) assertChanges(tb testing.TB, changes ...[]dns.RR) {
 	diff := diffChanges(changes, push.changes)
 	if len(diff) > 0 {
 		tb.Errorf("Bad changes:\n%s", diff)
+	}
+
+	diff = diffChanges([][]dns.RR{slices.Concat(push.changes...)}, [][]dns.RR{slices.Concat(push.debugChanges...)})
+	if len(diff) > 0 {
+		tb.Errorf("Bad debug changes:\n%s", diff)
 	}
 }
 
@@ -662,6 +662,9 @@ func TestPushAbortOnWriteError(t *testing.T) {
 		if err != push.writeErr {
 			t.Errorf("Got Serve()=%v, want %v", err, push.writeErr)
 		}
+		if len(push.debugChanges) > 0 {
+			t.Errorf("Got %v, want no debug changes", push.debugChanges)
+		}
 	})
 }
 
@@ -753,7 +756,7 @@ func TestPushCancelWrite(t *testing.T) {
 			t.Errorf("Got Serve()=%v, want context.Canceled", err)
 		}
 
-		// Second must not be attempted.
+		// Following writes must not be attempted.
 		push.assertChanges(t,
 			[]dns.RR{rr},
 		)
