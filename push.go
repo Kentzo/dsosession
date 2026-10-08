@@ -7,7 +7,6 @@ import (
 	"iter"
 	"maps"
 	"slices"
-	"strings"
 	"sync"
 	"time"
 
@@ -117,7 +116,7 @@ func (push *Push) CanAdd(id uint16, tlv dsomessage.Subscribe) (sub PushSubscribe
 		return sub, dns.RcodeServerFailure, ErrDuplicateSub
 	}
 	key := pushSubscribeKey{
-		strings.ToLower(tlv.Name), // assume [dns.UnpackDomainName]-like unicode escapes
+		dns.CanonicalName(tlv.Name),
 		tlv.RRType,
 		tlv.Class,
 	}
@@ -193,9 +192,9 @@ func (push *Push) remove(keys iter.Seq[pushSubscribeKey]) {
 func (push *Push) Reconfirm(tlv dsomessage.Reconfirm) {
 	h := tlv.RR.Header()
 	key := pushSubscribeKey{
-		Name:   strings.ToLower(h.Name),
-		RRType: h.Rrtype,
-		Class:  h.Class,
+		dns.CanonicalName(h.Name),
+		h.Rrtype,
+		h.Class,
 	}
 
 	push.refreshMu.Lock()
